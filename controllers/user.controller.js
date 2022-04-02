@@ -105,13 +105,26 @@ exports.getOrderById = catchAsync(async (req, res, next) => {
   const { id } = req.params;
   const order = await Order.findOne({
     where: { id, userId: req.currentUser.id },
+    attributes: ["id", "issuedAtt", "totalPrice", "status"],
     include: {
       model: Cart,
-      include: [{ model: ProductsInCart, include: [{ model: Product }] }],
+      attributes: ["id", "status"],
+      include: [
+        {
+          model: ProductsInCart,
+          attributes: ["id", "quantity", "status"],
+          include: [
+            {
+              model: Product,
+              attributes: ["id", "title", "description", "price"],
+            },
+          ],
+        },
+      ],
     },
   });
 
-  if (!order) return next(new AppError(400, "Catn get order with given Id"));
+  if (!order) return next(new AppError(404, "Catn get order with given Id"));
 
   res.status(200).json({
     status: "success",
