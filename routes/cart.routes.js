@@ -4,10 +4,16 @@ const { validateSession } = require("../middlewares/auth.middleware");
 const { findCartActive } = require("../middlewares/cart.middleware");
 
 const {
+  validationAddPRoduct,
+  validationUpdateProduct,
+} = require("../validators/cart.validator");
+
+const {
   addProduct,
   productsInCart,
   updateCart,
   purchaseCart,
+  removeCart,
 } = require("../controllers/cart.controller");
 
 const routes = express.Router();
@@ -16,12 +22,14 @@ routes.use(validateSession);
 
 routes.get("/", productsInCart);
 
-routes.post("/add-product", findCartActive, addProduct);
+routes.use(findCartActive);
 
-routes.patch("/update-cart", findCartActive, updateCart);
+routes.post("/add-product", validationAddPRoduct, addProduct);
 
-routes.delete("/:productId");
+routes.patch("/update-cart", validationUpdateProduct, updateCart);
 
-routes.post("/purchase", findCartActive, purchaseCart);
+routes.delete("/:cartId", removeCart);
+
+routes.post("/purchase", purchaseCart);
 
 module.exports = { routesCart: routes };

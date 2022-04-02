@@ -29,6 +29,7 @@ route.use(validateSession);
 route.get("/me", getAllProductsByUser);
 
 route.get("/orders", getAllOrders);
+
 route.get("/orders/:id", getOrderById);
 
 route

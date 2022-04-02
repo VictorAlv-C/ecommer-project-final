@@ -1,9 +1,14 @@
 const { Product } = require("../models/product.model");
+const { User } = require("../models/user.model");
+
 const { catchAsync } = require("../utils/catchAsync");
 const { filterObj } = require("../utils/filterObj");
 
 exports.getAllProducts = catchAsync(async (req, res, next) => {
-  const products = await Product.findAll({ where: { status: "active" } });
+  const products = await Product.findAll({
+    where: { status: "active" },
+    include: [{ model: User, attributes: ["username", "email", "status"] }],
+  });
 
   res.status(200).json({
     status: "success",

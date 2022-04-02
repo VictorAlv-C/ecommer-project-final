@@ -10,7 +10,6 @@ const { catchAsync } = require("../utils/catchAsync");
 exports.addProduct = catchAsync(async (req, res, next) => {
   const { productId, quantity } = req.body;
   const { cart, currentUser } = req;
-  let productInCart;
 
   const product = await Product.findOne({
     where: { id: productId, status: "active" },
@@ -33,49 +32,44 @@ exports.addProduct = catchAsync(async (req, res, next) => {
 
   if (!cart) {
     const newCart = await Cart.create({ userId: currentUser.id });
-    productInCart = await ProductsInCart.create({
+    await ProductsInCart.create({
       cartId: newCart.id,
       productId,
       quantity,
     });
-  } else if (cart.productsInCarts.length > 0) {
-    const idProducts = cart.productsInCarts.map((product) => product.productId);
-    if (idProducts.includes(productId)) {
-      const currentProduct = await ProductsInCart.findOne({
-        where: { productId, cartId: cart.id },
+  } else {
+    const findProduct = await ProductsInCart.findOne({
+      where: { productId, cartId: cart.id },
+    });
+
+    if (findProduct && findProduct.status === "active") {
+      return next(new AppError(400, "This product ready exist in the cart"));
+    }
+
+    if (findProduct && findProduct.status === "removed") {
+      await findProduct.update({
+        status: "active",
+        quantity,
       });
-      if (currentProduct.status === "active") {
-        return next(new AppError(400, "This product ready exist in the cart"));
-      } else {
-        productInCart = await currentProduct.update({
-          status: "active",
-          quantity,
-        });
-      }
-    } else {
-      productInCart = await ProductsInCart.create({
+    }
+
+    if (!findProduct) {
+      await ProductsInCart.create({
         cartId: cart.id,
         productId,
         quantity,
       });
     }
-  } else {
-    productInCart = await ProductsInCart.create({
-      cartId: cart.id,
-      productId,
-      quantity,
-    });
   }
 
   res.status(201).json({
     status: "success",
     message: "Product added to cart",
-    data: { productInCart },
   });
 });
 
 exports.productsInCart = catchAsync(async (req, res, next) => {
-  const productsInCart = await Cart.findAll({
+  const cart = await Cart.findOne({
     where: { userId: req.currentUser.id, status: "active" },
     attributes: [["id", "Cart Id"], "userId", "status"],
     include: [
@@ -101,9 +95,11 @@ exports.productsInCart = catchAsync(async (req, res, next) => {
     ],
   });
 
+  if (!cart) return next(new AppError(400, "Cart is Empty"));
+
   res.status(200).json({
     status: "success",
-    data: { productsInCart },
+    data: { cart },
   });
 });
 
@@ -140,15 +136,34 @@ exports.updateCart = catchAsync(async (req, res, next) => {
     where: { cartId: cart.id, productId },
   });
 
-  if (newQty === 0) await productInCart.update({ status: "removed" });
-
-  await productInCart.update({ quantity: newQty, status: "active" });
+  newQty === 0
+    ? await productInCart.update({ quantity: newQty, status: "removed" })
+    : await productInCart.update({ quantity: newQty, status: "active" });
 
   res.status(200).json({
     status: "Success",
     message: "Product Updated",
     data: { productInCart },
   });
+});
+
+exports.removeCart = catchAsync(async (req, res, next) => {
+  const { productId } = req.params;
+
+  if (!cart)
+    return next(new AppError(400, "There aren't products in the cart"));
+
+  const productInCart = await ProductInCart.findOne({
+    where: { status: "active", cartId: cart.id, productId },
+  });
+
+  if (!productInCart) {
+    return next(new AppError(404, "This product does not exist in this cart"));
+  }
+
+  await productInCart.update({ status: "removed", quantity: 0 });
+
+  res.status(204).json({ status: "success", message: "Product removed" });
 });
 
 exports.purchaseCart = catchAsync(async (req, res, next) => {
@@ -158,7 +173,7 @@ exports.purchaseCart = catchAsync(async (req, res, next) => {
 
   let totalPrice = 0;
 
-  cart.productsInCarts.forEach(async (productInCart) => {
+  const cartPromises = cart.productsInCarts.map(async (productInCart) => {
     if (productInCart.status === "active") {
       const product = await Product.findOne({
         where: { id: productInCart.productId },
@@ -170,11 +185,13 @@ exports.purchaseCart = catchAsync(async (req, res, next) => {
       const newExistence = product.quantity - productInCart.quantity;
       await product.update({ quantity: newExistence });
 
-      await productInCart.update({ status: "purchased" });
+      return await productInCart.update({ status: "purchased" });
     }
   });
 
-  await Order.create({
+  await Promise.all(cartPromises);
+
+  const order = await Order.create({
     issuedAtt: new Date().toString().substring(0, 24),
     userId: currentUser.id,
     cartId: cart.id,
@@ -186,5 +203,6 @@ exports.purchaseCart = catchAsync(async (req, res, next) => {
   res.status(200).json({
     status: "success",
     message: "Cart purchased",
+    data: { order },
   });
 });

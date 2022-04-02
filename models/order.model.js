@@ -9,7 +9,7 @@ const Order = sequelize.define("order", {
     allowNull: false,
   },
   issuedAtt: {
-    type: DataTypes.STRING(50),
+    type: DataTypes.STRING(100),
     allowNull: false,
   },
   totalPrice: {
@@ -24,9 +24,9 @@ const Order = sequelize.define("order", {
     type: DataTypes.INTEGER,
     allowNull: false,
   },
-  active: {
+  status: {
     type: DataTypes.STRING(10),
-    defaultValue: "true",
+    defaultValue: "active",
     allowNull: false,
   },
 });
